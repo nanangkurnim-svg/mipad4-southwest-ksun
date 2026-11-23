@@ -30,6 +30,7 @@ The fragments:
 - Run 6 (AOSP r563880c), `ksu-cfiperm`: boots. KernelSU-Next 33327 core (LSM hooks, supercalls) initialises with no CFI reports, but the table hook stays off (fixed by 0002).
 - Run 8, `ksu-cfiperm` with 0002: boots and finds `sys_call_table`. All 4 patches fail in the page walk (fixed by 0003). No CFI reports, no oops.
 - Run 9, `ksu-cfiperm` with 0003: `sth: 4/4 syscalls hooked`, no CFI reports. The manager still says "Unsupported | Not integrated": on the legacy branch, table mode only covers those 4 syscalls. ksud bootstrap (post-fs-data, init.rc, safe mode) and the reboot supercall are wired only for kprobes or manual hooks, so the manager is never recognised and ksud never gets installed. Switched to manual hooks; 0002/0003 stay for anyone who uses table mode.
+- Run 10, manual hooks: `Hook mode: Manual`, post-fs-data, init.rc proxy, safe-mode check and manager crowning all work, and ksud installs from the manager. The v3.4.2 release manager speaks UAPI 5 while legacy is UAPI 6, so it needs a newer manager build (`dev` CI >= 896f45a, v3.4.2-291, 33646). Final `ksu` (strict CFI) boots clean: no CFI reports, no oops. Status: **Working (built-in), v3.4.0-legacy (33327)**.
 
 ## Output
 Each variant's Actions artifact holds:
