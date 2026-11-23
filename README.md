@@ -33,6 +33,11 @@ The fragments:
 - Run 9, `ksu-cfiperm` with 0003: `sth: 4/4 syscalls hooked`, no CFI reports. The manager still says "Unsupported | Not integrated": on the legacy branch, table mode only covers those 4 syscalls. ksud bootstrap (post-fs-data, init.rc, safe mode) and the reboot supercall are wired only for kprobes or manual hooks, so the manager is never recognised and ksud never gets installed. Switched to manual hooks; 0002/0003 stay for anyone who uses table mode.
 - Run 10, manual hooks: `Hook mode: Manual`, post-fs-data, init.rc proxy, safe-mode check and manager crowning all work, and ksud installs from the manager. The v3.4.2 release manager speaks UAPI 5 while legacy is UAPI 6, so it needs a newer manager build (`dev` CI >= 896f45a, v3.4.2-291, 33646). Final `ksu` (strict CFI) boots clean: no CFI reports, no oops. Status: **Working (built-in), v3.4.0-legacy (33327)**.
 
+## Upstream tracking
+The build also runs daily (02:23 UTC). A small `upstream` job checks pix106's `main-legacy` and KernelSU-Next's `legacy` heads, and only builds when that pair hasn't been built before. When pix106 merges a new CIP tag, the kernel is rebuilt with all patches here on top.
+
+A trial merge of CIP `v4.19.325-cip137` straight into `main-legacy` (`cip-merge.yml`) auto-merged 817/831 files, with 19 conflict regions in 14 files. Most of them are pix106 already carrying the newer 5.x backport of the same fix (BPF prog_array owner, sock_ops, lwt_bpf, glink `strscpy`, `mmap_read_unlock`). `cpufreq_schedutil.c`, `mmc/core/bus.c` and `swapfile.c` need hand merging. cip137 has no performance changes, so this repo waits for pix106's own merge rather than carrying a hand resolution in sched/mm/storage code.
+
 ## Output
 Each variant's Actions artifact holds:
 - `boot-<variant>.img`: the stock LineageOS 23.2 (20261112) boot image with only the kernel swapped; the ramdisk is untouched

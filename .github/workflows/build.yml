@@ -12,6 +12,10 @@ on:
   push:
     branches: [main]
     paths: ['config/**', '.github/workflows/**', 'patches/**', 'scripts/**']
+  # Daily: rebuild only if pix106's branch or KernelSU-Next legacy moved (e.g.
+  # pix106 merging a new CIP tag), so upstream fixes land without manual work.
+  schedule:
+    - cron: '23 2 * * *'
 
 env:
   KERNEL_REPO: https://github.com/pix106/android_kernel_xiaomi_sdm660_southwest-ng
@@ -22,7 +26,37 @@ env:
   CLANG_DIR: clang-r563880c
 
 jobs:
+  # Decides whether a scheduled run has anything new to build. Push and manual
+  # runs always build.
+  upstream:
+    runs-on: ubuntu-24.04
+    outputs:
+      key: ${{ steps.heads.outputs.key }}
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - id: heads
+        run: |
+          k=$(git ls-remote "$KERNEL_REPO" "refs/heads/$KERNEL_REF" | cut -c1-12)
+          s=$(git ls-remote https://github.com/KernelSU-Next/KernelSU-Next "refs/heads/$KSUN_REF" | cut -c1-12)
+          echo "pix106 $KERNEL_REF @ $k, KernelSU-Next $KSUN_REF @ $s"
+          echo "key=upstream-${k}-${s}" >> "$GITHUB_OUTPUT"
+      - id: seen
+        uses: actions/cache/restore@v4
+        with:
+          path: .upstream-built
+          key: ${{ steps.heads.outputs.key }}
+          lookup-only: true
+      - id: decide
+        run: |
+          if [ "${{ github.event_name }}" = schedule ] && [ "${{ steps.seen.outputs.cache-hit }}" = true ]; then
+            echo "already built ${{ steps.heads.outputs.key }}"; echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: upstream
+    if: needs.upstream.outputs.build == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -178,3 +212,14 @@ jobs:
             dist/
             build.log
           if-no-files-found: warn
+
+      # Remember this upstream pair as built, so the daily check skips it.
+      - name: Mark upstream as built
+        if: success() && matrix.variant == 'ksu'
+        run: echo "${{ needs.upstream.outputs.key }}" > .upstream-built
+      - uses: actions/cache/save@v4
+        if: success() && matrix.variant == 'ksu'
+        continue-on-error: true
+        with:
+          path: .upstream-built
+          key: ${{ needs.upstream.outputs.key }}
