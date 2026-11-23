@@ -1,0 +1,106 @@
+diff --git a/drivers/media/platform/msm/vidc_3x/msm_vidc_dcvs.c b/drivers/media/platform/msm/vidc_3x/msm_vidc_dcvs.c
+index 4f16d39..19b2b84 100644
+--- a/drivers/media/platform/msm/vidc_3x/msm_vidc_dcvs.c
++++ b/drivers/media/platform/msm/vidc_3x/msm_vidc_dcvs.c
+@@ -132,7 +132,15 @@ static void msm_dcvs_dec_check_and_scale_clocks(struct msm_vidc_inst *inst)
+ {
+ 	int rc = 0;
+ 
+-	if (inst->session_type != MSM_VIDC_DECODER || !msm_vidc_dec_dcvs_mode)
++	if (inst->session_type != MSM_VIDC_DECODER)
++		return;
++
++	if (msm_vidc_low_latency) {
++		inst->dcvs_mode = false;
++		return;
++	}
++
++	if (!msm_vidc_dec_dcvs_mode)
+ 		return;
+ 
+ 	if (msm_dcvs_check_supported(inst)) {
+diff --git a/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.c b/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.c
+index 5731323..94622a5 100644
+--- a/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.c
++++ b/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.c
+@@ -13,6 +13,7 @@
+  */
+ 
+ #define CREATE_TRACE_POINTS
++#include <linux/moduleparam.h>
+ #include "msm_vidc_common.h"
+ #define MAX_SSR_STRING_LEN 10
+ #include "msm_vidc_debug.h"
+@@ -33,6 +34,23 @@ bool msm_vidc_thermal_mitigation_disabled = true;
+ bool msm_vidc_bitrate_clock_scaling = true;
+ bool msm_vidc_debug_timeout = true;
+ 
++/*
++ * Low-latency mode for game streaming. When set, Venus runs at the top
++ * allowed clock and decoder DCVS is skipped, so each frame decodes as fast
++ * as the hardware allows instead of at the slowest clock that still keeps up
++ * with the stream (e.g. SVS for 1080p60). Takes effect from the next clock
++ * update. Userspace turns it on only while a streaming client is in front.
++ *
++ * fw_low_power_mode and sys_idle_indicator are sent to the firmware when
++ * the core starts (it unloads after msm_vidc_firmware_unload_delay idle), so
++ * changes apply from the next cold start of Venus.
++ */
++bool msm_vidc_low_latency;
++module_param_named(low_latency, msm_vidc_low_latency, bool, 0644);
++MODULE_PARM_DESC(low_latency, "Pin Venus at its top clock and skip decoder DCVS");
++module_param_named(fw_low_power_mode, msm_vidc_fw_low_power_mode, int, 0644);
++module_param_named(sys_idle_indicator, msm_vidc_sys_idle_indicator, bool, 0644);
++
+ #define MAX_DBG_BUF_SIZE 4096
+ 
+ #define DYNAMIC_BUF_OWNER(__binfo) ({ \
+diff --git a/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.h b/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.h
+index 51043e2..f9de5e9 100644
+--- a/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.h
++++ b/drivers/media/platform/msm/vidc_3x/msm_vidc_debug.h
+@@ -69,6 +69,7 @@ extern int msm_vidc_firmware_unload_delay;
+ extern bool msm_vidc_thermal_mitigation_disabled;
+ extern bool msm_vidc_bitrate_clock_scaling;
+ extern bool msm_vidc_debug_timeout;
++extern bool msm_vidc_low_latency;
+ 
+ static inline char *VIDC_MSG_PRIO2STRING(int __level)
+ {
+diff --git a/drivers/media/platform/msm/vidc_3x/venus_hfi.c b/drivers/media/platform/msm/vidc_3x/venus_hfi.c
+index 7ca9fda..cb3a722 100644
+--- a/drivers/media/platform/msm/vidc_3x/venus_hfi.c
++++ b/drivers/media/platform/msm/vidc_3x/venus_hfi.c
+@@ -1367,6 +1367,32 @@ static int __scale_clocks_cycles_per_mb(struct venus_hfi_device *device,
+ 		}
+ 	}
+ 
++	/*
++	 * In this cycles-per-MB path a VIDC_POWER_TURBO session was never treated
++	 * specially (only VIDC_POWER_LOW was), so turbo still landed on the
++	 * throughput-sized clock. Pin to the top allowed rate for turbo sessions
++	 * and in low-latency mode. Only reached with valid session data.
++	 */
++	if (data->num_sessions && device->res->allowed_clks_tbl_size) {
++		bool pin_max = msm_vidc_low_latency;
++		u64 max_rate = 0;
++
++		for (i = 0; i < data->num_sessions && !pin_max; i++)
++			pin_max = data->power_mode[i] == VIDC_POWER_TURBO;
++
++		if (pin_max) {
++			/* The DT table is not sorted, so take its maximum. */
++			for (i = 0; i < device->res->allowed_clks_tbl_size; i++)
++				max_rate = max_t(u64, max_rate,
++					allowed_clks_tbl[i].clock_rate);
++			dprintk(VIDC_PROF,
++				"low-latency/turbo: core clock %llu (load needs %llu)
++",
++				max_rate, total_freq);
++			total_freq = max_rate;
++		}
++	}
++
+ get_clock_freq:
+ 	/*
+ 	 * get required clock rate from allowed clock rates table
