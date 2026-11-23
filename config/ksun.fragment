@@ -1,6 +1,9 @@
-# KernelSU-Next (legacy branch), built in. Non-GKI 4.19 has no kprobes in this
-# build, so use the syscall-table hook instead of manual source hooks.
+# KernelSU-Next (legacy branch), built in, with manual hooks
+# (patches/kernel/0001). On this branch the syscall-table mode only covers
+# execve/execveat/faccessat/fstatat. Everything that bootstraps ksud
+# (post-fs-data, the init.rc proxy, volume-down safe mode) and the reboot
+# supercall the manager uses to get its fd are wired only for kprobes or
+# manual hooks, and this kernel has no kprobes.
 CONFIG_KSU=y
 # CONFIG_KSU_DEBUG is not set
-# CONFIG_KSU_MANUAL_HOOK is not set
-CONFIG_KSU_SYSCALL_TABLE_HOOK=y
+CONFIG_KSU_MANUAL_HOOK=y
