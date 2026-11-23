@@ -1,0 +1,67 @@
+name: Merge a CIP tag into SouthWest-NG (dry run + patch export)
+
+# Mirrors how pix106 takes CIP updates (git merge of the tag into the branch).
+# Outputs patches/kernel/0000-<tag>.patch-ready diff (main-legacy -> merge result)
+# so the build workflow can apply it to a shallow clone of the same base.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: SouthWest-NG branch
+        default: main-legacy
+      cip_tag:
+        description: CIP tag to merge
+        default: v4.19.325-cip137
+      cip_base:
+        description: CIP tag already merged into kernel_ref
+        default: v4.19.325-cip136
+
+jobs:
+  merge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Clone SouthWest-NG history (blobless)
+        run: |
+          git clone -q --filter=blob:none -b "${{ inputs.kernel_ref }}" \
+            https://github.com/pix106/android_kernel_xiaomi_sdm660_southwest-ng kernel
+          git -C kernel log -1 --format='base: %H %s'
+
+      - name: Fetch ${{ inputs.cip_tag }} from kernel.org
+        working-directory: kernel
+        run: |
+          git remote add cip https://git.kernel.org/pub/scm/linux/kernel/git/cip/linux-cip.git
+          # Only the commits after the tag that's already merged.
+          git fetch -q cip "refs/tags/${{ inputs.cip_tag }}:refs/tags/${{ inputs.cip_tag }}" \
+            --shallow-exclude="${{ inputs.cip_base }}" || \
+          git fetch -q cip "refs/tags/${{ inputs.cip_tag }}:refs/tags/${{ inputs.cip_tag }}" --depth=2000
+          echo "merge-base: $(git merge-base HEAD ${{ inputs.cip_tag }} || echo none)"
+          echo "commits to merge: $(git rev-list --count HEAD..${{ inputs.cip_tag }})"
+
+      - name: Merge
+        working-directory: kernel
+        run: |
+          git config user.name ci; git config user.email ci@localhost
+          if git merge --no-edit --no-ff "${{ inputs.cip_tag }}" > ../merge.log 2>&1; then
+            echo "CLEAN MERGE" | tee -a ../merge.log
+          else
+            echo "CONFLICTS:" | tee -a ../merge.log
+            git diff --name-only --diff-filter=U | tee ../conflicts.txt | tee -a ../merge.log
+            for f in $(cat ../conflicts.txt); do echo "=== $f"; git diff -- "$f" | head -200; done > ../conflict-hunks.txt
+            exit 1
+          fi
+          git diff "origin/${{ inputs.kernel_ref }}" HEAD > ../cip-merge.patch
+          git diff --stat "origin/${{ inputs.kernel_ref }}" HEAD | tail -3
+          ls -l ../cip-merge.patch
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cip-merge-${{ inputs.cip_tag }}
+          path: |
+            merge.log
+            conflicts.txt
+            conflict-hunks.txt
+            cip-merge.patch
+          if-no-files-found: ignore
