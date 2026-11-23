@@ -8,7 +8,7 @@ A personal build of [pix106's SouthWest-NG](https://github.com/pix106/android_ke
   - KernelSU-Next with the syscall-table hook (no kprobes on this kernel)
   - TCP BBR and fq_codel
   - a `-KSUN` suffix on the local version
-- It builds with the same AOSP clang (`r563880c`) that pix106 used.
+- It builds with upstream LLVM/Clang 21 from apt.llvm.org. That's the same major version as the AOSP clang `r563880c` pix106 used, which AOSP no longer publishes.
 
 ## Output
 The Actions artifact holds:

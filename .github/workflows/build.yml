@@ -9,9 +9,9 @@ on:
       ksun_ref:
         description: KernelSU-Next branch, tag or commit
         default: legacy
-      clang:
-        description: AOSP clang prebuilt directory
-        default: clang-r563880c
+      llvm:
+        description: Upstream LLVM major version (apt.llvm.org)
+        default: '21'
   push:
     branches: [main]
     paths: ['config/**', '.github/workflows/**', 'patches/**']
@@ -20,7 +20,7 @@ env:
   KERNEL_REPO: https://github.com/pix106/android_kernel_xiaomi_sdm660_southwest-ng
   KERNEL_REF: ${{ inputs.kernel_ref || 'main-legacy' }}
   KSUN_REF: ${{ inputs.ksun_ref || 'legacy' }}
-  CLANG_DIR: ${{ inputs.clang || 'clang-r563880c' }}
+  LLVM_VERSION: ${{ inputs.llvm || '21' }}
 
 jobs:
   build:
@@ -35,20 +35,16 @@ jobs:
           sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev cpio git zip lz4 \
             python3 device-tree-compiler binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
 
-      - name: Fetch AOSP clang (${{ env.CLANG_DIR }})
+      # AOSP no longer publishes r563880c (clang 21), the compiler pix106 used,
+      # so use the matching upstream LLVM major from the official apt.llvm.org.
+      - name: Install LLVM ${{ env.LLVM_VERSION }} (apt.llvm.org)
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/clang"
-          base=https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
-          if ! curl -fsSL "$base/+archive/refs/heads/main/$CLANG_DIR.tar.gz" | tar -xz -C "$HOME/clang"; then
-            echo "::warning::$CLANG_DIR not on main, falling back to newest clang-r*"
-            newest=$(curl -fsSL "$base/+/refs/heads/main?format=JSON" | tail -c +6 \
-              | python3 -c "import json,sys; print(sorted(e['name'] for e in json.load(sys.stdin)['entries'] if e['name'].startswith('clang-r'))[-1])")
-            echo "using $newest"
-            curl -fsSL "$base/+archive/refs/heads/main/$newest.tar.gz" | tar -xz -C "$HOME/clang"
-          fi
-          echo "$HOME/clang/bin" >> "$GITHUB_PATH"
-          "$HOME/clang/bin/clang" --version | head -1
+          curl -fsSL https://apt.llvm.org/llvm.sh -o llvm.sh
+          sudo bash llvm.sh "$LLVM_VERSION"
+          sudo apt-get install -y -qq "lld-$LLVM_VERSION" "llvm-$LLVM_VERSION"
+          echo "/usr/lib/llvm-$LLVM_VERSION/bin" >> "$GITHUB_PATH"
+          "/usr/lib/llvm-$LLVM_VERSION/bin/clang" --version | head -1
 
       - name: Clone SouthWest-NG (${{ env.KERNEL_REF }})
         run: |
