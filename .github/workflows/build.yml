@@ -41,11 +41,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Runner apt mirrors occasionally hang; bound each attempt and retry.
       - name: Install host packages
+        timeout-minutes: 12
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev cpio git zip lz4 \
-            python3 device-tree-compiler binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+          pkgs="bc bison flex libssl-dev libelf-dev cpio git zip lz4 python3 device-tree-compiler binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi"
+          for i in 1 2 3; do
+            if timeout 180 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq \
+               && timeout 240 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq $pkgs; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $i failed or timed out, retrying"
+            sleep 10
+          done
+          exit 1
 
       - name: Fetch AOSP ${{ env.CLANG_DIR }} (${{ env.CLANG_BRANCH }})
         run: |
