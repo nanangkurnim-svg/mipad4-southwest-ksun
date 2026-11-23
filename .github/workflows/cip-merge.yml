@@ -22,9 +22,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - name: Clone SouthWest-NG history (blobless)
+      # A full clone (~1.4 GB). A blobless clone can't merge: the three-way merge
+      # lazily fetches merge-base blobs, and GitHub refused some of them
+      # ("not our ref" from the promisor remote).
+      - name: Clone SouthWest-NG history
         run: |
-          git clone -q --filter=blob:none -b "${{ inputs.kernel_ref }}" \
+          git clone -q --single-branch -b "${{ inputs.kernel_ref }}" \
             https://github.com/pix106/android_kernel_xiaomi_sdm660_southwest-ng kernel
           git -C kernel log -1 --format='base: %H %s'
 
