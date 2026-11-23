@@ -64,8 +64,10 @@ jobs:
       - name: Apply patches
         working-directory: kernel
         run: |
+          set -euo pipefail
           shopt -s nullglob
-          for p in ../patches/*.patch; do echo "applying $p"; git apply --verbose "$p"; done
+          for p in ../patches/kernel/*.patch; do echo "kernel: $p"; git apply --verbose "$p"; done
+          for p in ../patches/ksun/*.patch; do echo "KernelSU-Next: $p"; git -C KernelSU-Next apply --verbose "../$p"; done
 
       - name: Configure
         working-directory: kernel
@@ -85,7 +87,8 @@ jobs:
         working-directory: kernel
         run: |
           set -o pipefail
-          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+          # -k: report every compile error in one run instead of stopping at the first
+          make -k -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
             CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- \
             Image.gz-dtb 2>&1 | tee ../build.log

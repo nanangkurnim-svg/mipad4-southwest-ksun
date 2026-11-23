@@ -10,6 +10,9 @@ A personal build of [pix106's SouthWest-NG](https://github.com/pix106/android_ke
   - a `-KSUN` suffix on the local version
 - It builds with upstream LLVM/Clang 21 from apt.llvm.org. That's the same major version as the AOSP clang `r563880c` pix106 used, which AOSP no longer publishes.
 
+## Patches
+- `patches/ksun/0001`: pix106's tree backports `copy_to_kernel_nofault()` from 5.8. KernelSU-Next's pre-5.8 compat macro then clashes with that declaration. The patch adds a Kbuild check for the backport, the same way KernelSU-Next already handles `strncpy_from_user_nofault`.
+
 ## Output
 The Actions artifact holds:
 - `boot-ksun.img`: the stock LineageOS 23.2 (20261112) boot image with only the kernel swapped; the ramdisk is untouched

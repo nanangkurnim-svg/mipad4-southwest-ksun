@@ -1,0 +1,29 @@
+diff --git a/kernel/Kbuild b/kernel/Kbuild
+index f7e8d52..f22e1a8 100644
+--- a/kernel/Kbuild
++++ b/kernel/Kbuild
+@@ -338,6 +338,11 @@ ccflags-y += -DKSU_COMPAT_HAS_BACKPORTED_CPUS_PTR
+ endif
+ 
+ # Handle optional backports
++# Some 4.x vendor trees backport copy_to_kernel_nofault() from 5.8
++ifeq ($(shell grep -q "copy_to_kernel_nofault" $(srctree)/include/linux/uaccess.h; echo $$?),0)
++ccflags-y += -DKSU_HAS_COPY_TO_KERNEL_NOFAULT
++endif
++
+ ifeq ($(shell grep -q "strncpy_from_user_nofault" $(srctree)/include/linux/uaccess.h; echo $$?),0)
+ ccflags-y += -DKSU_OPTIONAL_STRNCPY
+ endif
+diff --git a/kernel/hook/patch_memory.c b/kernel/hook/patch_memory.c
+index d9e40cc..9bc92c2 100644
+--- a/kernel/hook/patch_memory.c
++++ b/kernel/hook/patch_memory.c
+@@ -10,7 +10,7 @@
+ 
+ // copy_to_kernel_nofault() was introduced in 5.8; before that it was
+ // named probe_kernel_write()
+-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
++#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) && !defined(KSU_HAS_COPY_TO_KERNEL_NOFAULT)
+ #define copy_to_kernel_nofault(dst, src, size)                                 \
+ 	probe_kernel_write((dst), (src), (size))
+ #endif
