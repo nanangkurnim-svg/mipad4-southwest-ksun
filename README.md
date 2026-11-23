@@ -20,19 +20,21 @@ The fragments:
 
 ## Patches
 - `patches/ksun/0001`: pix106's tree backports `copy_to_kernel_nofault()` from 5.8. KernelSU-Next's pre-5.8 compat macro then clashes with that declaration. The patch adds a Kbuild check for the backport, the same way KernelSU-Next already handles `strncpy_from_user_nofault`.
+- `patches/ksun/0002`: this config has no `CONFIG_KALLSYMS_ALL` (it depends on `DEBUG_KERNEL`), so kallsyms can't resolve the data symbol `sys_call_table` and the table hook switched itself off (`sth: sys_call_table not found`). Built in, KernelSU-Next now takes the address from `<asm/syscall.h>` instead.
+- `scripts/prepatch_ksun_backports.py`: KernelSU-Next's Kbuild `sed`-edits `fs/namespace.c`, `fs/internal.h` and `include/linux/seccomp.h` during the build. Under `-j`, objects compiled before the edit miss `path_umount` or disagree on the `struct seccomp` layout. The script applies the same backports before `make`, and the build fails if KernelSU-Next edits sources anyway.
+
+## Findings
+- Run 5 (upstream clang 21.1.8): bootloops before ramoops. Its KSU table hook was already disabled by the lookup failure 0002 fixes, so the toolchain was the cause.
+- Run 6 (AOSP r563880c), `ksu-cfiperm`: boots. KernelSU-Next 33327 core (LSM hooks, supercalls) initialises with no CFI reports, but the table hook stays off (fixed by 0002).
 
 ## Output
-The Actions artifact holds:
-- `boot-ksun.img`: the stock LineageOS 23.2 (20261112) boot image with only the kernel swapped; the ramdisk is untouched
+Each variant's Actions artifact holds:
+- `boot-<variant>.img`: the stock LineageOS 23.2 (20261112) boot image with only the kernel swapped; the ramdisk is untouched
 - `Image.gz-dtb`
 - the final `.config`
+- `System.map`
 - the build log and SHA256 sums
 
 Flash it only on the matching ROM build. Keep the stock `boot.img` so you can roll back.
 
 All kernel code belongs to its upstream authors (GPL-2.0).
-- `patches/ksun/0002`: this config has no `CONFIG_KALLSYMS_ALL` (it depends on `DEBUG_KERNEL`), so kallsyms can't resolve the data symbol `sys_call_table` and the table hook switched itself off (`sth: sys_call_table not found`). Built in, KernelSU-Next now takes the address from `<asm/syscall.h>` instead.
-
-## Findings
-- Run 5 (upstream clang 21.1.8): bootloops before ramoops. Its KSU table hook was already disabled by the lookup failure above, so the toolchain was the cause.
-- Run 6 (AOSP r563880c), `ksu-cfiperm`: boots. KernelSU-Next 33327 core (LSM hooks, supercalls) initialises, no CFI reports, but the table hook stays off (fixed by 0002).
