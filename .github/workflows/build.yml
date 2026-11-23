@@ -1,0 +1,135 @@
+name: Build SouthWest-NG + KernelSU-Next (clover)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_ref:
+        description: SouthWest-NG branch or commit
+        default: main-legacy
+      ksun_ref:
+        description: KernelSU-Next branch, tag or commit
+        default: legacy
+      clang:
+        description: AOSP clang prebuilt directory
+        default: clang-r563880c
+  push:
+    branches: [main]
+    paths: ['config/**', '.github/workflows/**', 'patches/**']
+
+env:
+  KERNEL_REPO: https://github.com/pix106/android_kernel_xiaomi_sdm660_southwest-ng
+  KERNEL_REF: ${{ inputs.kernel_ref || 'main-legacy' }}
+  KSUN_REF: ${{ inputs.ksun_ref || 'legacy' }}
+  CLANG_DIR: ${{ inputs.clang || 'clang-r563880c' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host packages
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev cpio git zip lz4 \
+            python3 device-tree-compiler binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+
+      - name: Fetch AOSP clang (${{ env.CLANG_DIR }})
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/clang"
+          base=https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
+          if ! curl -fsSL "$base/+archive/refs/heads/main/$CLANG_DIR.tar.gz" | tar -xz -C "$HOME/clang"; then
+            echo "::warning::$CLANG_DIR not on main, falling back to newest clang-r*"
+            newest=$(curl -fsSL "$base/+/refs/heads/main?format=JSON" | tail -c +6 \
+              | python3 -c "import json,sys; print(sorted(e['name'] for e in json.load(sys.stdin)['entries'] if e['name'].startswith('clang-r'))[-1])")
+            echo "using $newest"
+            curl -fsSL "$base/+archive/refs/heads/main/$newest.tar.gz" | tar -xz -C "$HOME/clang"
+          fi
+          echo "$HOME/clang/bin" >> "$GITHUB_PATH"
+          "$HOME/clang/bin/clang" --version | head -1
+
+      - name: Clone SouthWest-NG (${{ env.KERNEL_REF }})
+        run: |
+          git clone --depth=1 -b "$KERNEL_REF" "$KERNEL_REPO" kernel \
+            || { git clone "$KERNEL_REPO" kernel && git -C kernel checkout "$KERNEL_REF"; }
+          git -C kernel log -1 --format='%H %s' | tee kernel-commit.txt
+
+      - name: Add KernelSU-Next (${{ env.KSUN_REF }})
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/dev/kernel/setup.sh | bash -s "$KSUN_REF"
+          git -C KernelSU-Next log -1 --format='%H %s' | tee ../ksun-commit.txt
+          test -L drivers/kernelsu
+          grep -q kernelsu drivers/Makefile
+
+      - name: Apply patches
+        working-directory: kernel
+        run: |
+          shopt -s nullglob
+          for p in ../patches/*.patch; do echo "applying $p"; git apply --verbose "$p"; done
+
+      - name: Configure
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp ../config/running-0.23.0-legacy.config out/.config
+          cat ../config/ksun.fragment >> out/.config
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang olddefconfig
+          echo "--- resulting options ---"
+          grep -E '^(# )?CONFIG_(KSU[A-Z_]*|TCP_CONG_BBR|NET_SCH_FQ_CODEL|LOCALVERSION|LTO_CLANG|KPROBES)[ =]' out/.config
+          for opt in CONFIG_KSU=y CONFIG_KSU_SYSCALL_TABLE_HOOK=y CONFIG_TCP_CONG_BBR=y; do
+            grep -qx "$opt" out/.config || { echo "::error::$opt did not survive olddefconfig"; exit 1; }
+          done
+
+      - name: Build
+        working-directory: kernel
+        run: |
+          set -o pipefail
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+            CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- \
+            Image.gz-dtb 2>&1 | tee ../build.log
+          ls -l out/arch/arm64/boot/
+
+      - name: Sanity-check the kernel image
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          strings out/vmlinux | grep -m1 'Linux version'
+          strings out/vmlinux | grep -m3 -i 'kernelsu' || { echo "::error::no KernelSU strings in vmlinux"; exit 1; }
+          grep -E 'KernelSU-Next version' ../build.log | tail -2 || true
+
+      - name: Repack stock LineageOS boot.img with the new kernel
+        run: |
+          set -euo pipefail
+          git clone --depth=1 https://android.googlesource.com/platform/system/tools/mkbootimg mkbootimg
+          stock=$(ls stock/*.img | head -1)
+          python3 mkbootimg/unpack_bootimg.py --boot_img "$stock" --out unpacked --format mkbootimg > mkargs.txt
+          cat mkargs.txt
+          eval "set -- $(cat mkargs.txt)"
+          python3 mkbootimg/mkbootimg.py "$@" --kernel kernel/out/arch/arm64/boot/Image.gz-dtb --output boot-ksun.img
+          python3 mkbootimg/unpack_bootimg.py --boot_img boot-ksun.img --out check >/dev/null
+          cmp unpacked/ramdisk check/ramdisk && echo "ramdisk preserved"
+          ls -l "$stock" boot-ksun.img
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp boot-ksun.img dist/
+          cp kernel/out/arch/arm64/boot/Image.gz-dtb dist/
+          cp kernel/out/.config dist/kernel.config
+          cp kernel-commit.txt ksun-commit.txt build.log dist/
+          (cd dist && sha256sum boot-ksun.img Image.gz-dtb > SHA256SUMS && cat SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clover-southwest-ng-ksun-${{ github.run_number }}
+          path: |
+            dist/
+            build.log
+          if-no-files-found: warn
