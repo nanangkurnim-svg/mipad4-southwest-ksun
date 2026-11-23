@@ -68,6 +68,10 @@ jobs:
           shopt -s nullglob
           for p in ../patches/kernel/*.patch; do echo "kernel: $p"; git apply --verbose "$p"; done
           for p in ../patches/ksun/*.patch; do echo "KernelSU-Next: $p"; git -C KernelSU-Next apply --verbose "../$p"; done
+          # KernelSU-Next's Kbuild sed-edits kernel sources mid-build (races with -j);
+          # apply those backports up front so it finds them already present.
+          python3 ../scripts/prepatch_ksun_backports.py
+          git diff --stat
 
       - name: Configure
         working-directory: kernel
@@ -98,6 +102,10 @@ jobs:
         working-directory: kernel
         run: |
           set -euo pipefail
+          if grep -E 'KSU_NEXT: (adding|patching)' ../build.log; then
+            echo "::error::KernelSU-Next edited kernel sources mid-build; objects may disagree. Extend scripts/prepatch_ksun_backports.py."
+            exit 1
+          fi
           strings out/vmlinux | grep -m1 'Linux version'
           strings out/vmlinux | grep -m3 -i 'kernelsu' || { echo "::error::no KernelSU strings in vmlinux"; exit 1; }
           grep -E 'KernelSU-Next version' ../build.log | tail -2 || true
