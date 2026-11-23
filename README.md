@@ -4,11 +4,19 @@ A personal build of [pix106's SouthWest-NG](https://github.com/pix106/android_ke
 
 ## What it changes
 - The base config is the one pulled from the running 0.23.0-legacy kernel (`/proc/config.gz`).
-- `config/ksun.fragment` adds:
-  - KernelSU-Next with the syscall-table hook (no kprobes on this kernel)
-  - TCP BBR and fq_codel
-  - a `-KSUN` suffix on the local version
-- It builds with upstream LLVM/Clang 21 from apt.llvm.org. That's the same major version as the AOSP clang `r563880c` pix106 used, which AOSP no longer publishes.
+- It builds with AOSP `clang-r563880c`, the compiler pix106 used, sparse-cloned from the `android16-qpr2-release` branch of AOSP's `prebuilts/clang/host/linux-x86`.
+- Three variants are built as a matrix:
+
+| Variant | Fragments | Purpose |
+|---|---|---|
+| `noksu` | common | Baseline: same toolchain and config, no KernelSU |
+| `ksu-cfiperm` | common + ksun + cfi-permissive | KernelSU-Next with CFI violations logged instead of panicking |
+| `ksu` | common + ksun | KernelSU-Next with strict CFI |
+
+The fragments:
+- `common`: TCP BBR (behind `TCP_CONG_ADVANCED`) and fq_codel
+- `ksun`: KernelSU-Next with the syscall-table hook (this kernel has no kprobes)
+- `cfi-permissive`: `CONFIG_CFI_PERMISSIVE=y`
 
 ## Patches
 - `patches/ksun/0001`: pix106's tree backports `copy_to_kernel_nofault()` from 5.8. KernelSU-Next's pre-5.8 compat macro then clashes with that declaration. The patch adds a Kbuild check for the backport, the same way KernelSU-Next already handles `strncpy_from_user_nofault`.

@@ -1,0 +1,3 @@
+# Diagnostic: report Clang CFI violations in dmesg instead of panicking, so a
+# boot that would die before ramoops is usable shows the offending call.
+CONFIG_CFI_PERMISSIVE=y

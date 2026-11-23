@@ -1,0 +1,9 @@
+# Applied to every variant, on top of the running 0.23.0-legacy config.
+
+# Less bufferbloat on the Wi-Fi uplink while streaming. On 4.19, BBR sits
+# behind TCP_CONG_ADVANCED. Cubic stays the default; BBR is opt-in at runtime.
+CONFIG_TCP_CONG_ADVANCED=y
+CONFIG_TCP_CONG_CUBIC=y
+CONFIG_TCP_CONG_BBR=y
+CONFIG_DEFAULT_CUBIC=y
+CONFIG_NET_SCH_FQ_CODEL=y

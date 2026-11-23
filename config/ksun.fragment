@@ -1,18 +1,6 @@
-# Applied on top of the config pulled from the running SouthWest-NG 0.23.0-legacy kernel.
-
 # KernelSU-Next (legacy branch), built in. Non-GKI 4.19 has no kprobes in this
 # build, so use the syscall-table hook instead of manual source hooks.
 CONFIG_KSU=y
 # CONFIG_KSU_DEBUG is not set
 # CONFIG_KSU_MANUAL_HOOK is not set
-# CONFIG_KSU_KPROBES_HOOK is not set
 CONFIG_KSU_SYSCALL_TABLE_HOOK=y
-
-# Less bufferbloat on the Wi-Fi uplink while streaming.
-CONFIG_TCP_CONG_ADVANCED=y
-CONFIG_TCP_CONG_CUBIC=y
-CONFIG_TCP_CONG_BBR=y
-CONFIG_DEFAULT_CUBIC=y
-CONFIG_NET_SCH_FQ_CODEL=y
-
-CONFIG_LOCALVERSION="-SouthWest-NG-0.23.0-legacy-KSUN"
