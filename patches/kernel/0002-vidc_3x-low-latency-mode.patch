@@ -68,10 +68,10 @@ index 51043e2..f9de5e9 100644
  static inline char *VIDC_MSG_PRIO2STRING(int __level)
  {
 diff --git a/drivers/media/platform/msm/vidc_3x/venus_hfi.c b/drivers/media/platform/msm/vidc_3x/venus_hfi.c
-index 7ca9fda..cb3a722 100644
+index 7ca9fda..4ebd9f6 100644
 --- a/drivers/media/platform/msm/vidc_3x/venus_hfi.c
 +++ b/drivers/media/platform/msm/vidc_3x/venus_hfi.c
-@@ -1367,6 +1367,32 @@ static int __scale_clocks_cycles_per_mb(struct venus_hfi_device *device,
+@@ -1367,6 +1367,31 @@ static int __scale_clocks_cycles_per_mb(struct venus_hfi_device *device,
  		}
  	}
  
@@ -94,8 +94,7 @@ index 7ca9fda..cb3a722 100644
 +				max_rate = max_t(u64, max_rate,
 +					allowed_clks_tbl[i].clock_rate);
 +			dprintk(VIDC_PROF,
-+				"low-latency/turbo: core clock %llu (load needs %llu)
-+",
++				"low-latency/turbo: core clock %llu (load needs %llu)\n",
 +				max_rate, total_freq);
 +			total_freq = max_rate;
 +		}
