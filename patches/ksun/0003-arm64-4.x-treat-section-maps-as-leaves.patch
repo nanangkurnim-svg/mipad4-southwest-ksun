@@ -1,0 +1,22 @@
+diff --git a/kernel/hook/patch_memory.c b/kernel/hook/patch_memory.c
+index d9e40cc..ed73bf5 100644
+--- a/kernel/hook/patch_memory.c
++++ b/kernel/hook/patch_memory.c
+@@ -34,6 +34,17 @@
+ 
+ // https://github.com/fuqiuluo/ovo/blob/f7da411458e87d32438dc14fce5a3313ed0c967e/ovo/mmuhack.c#L21
+ 
++// pmd_leaf()/pud_leaf() only exist from 5.7. arm64 4.x calls them
++// pmd_sect()/pud_sect(). Without them a 2M block mapping, which is how the
++// kernel maps its rodata (and sys_call_table) there, looks like a bad table
++// entry and the walk fails with -ENOENT.
++#if !defined(pmd_leaf) && defined(pmd_sect)
++#define pmd_leaf(pmd) pmd_sect(pmd)
++#endif
++#if !defined(pud_leaf) && defined(pud_sect)
++#define pud_leaf(pud) pud_sect(pud)
++#endif
++
+ // Translate a kernel virtual address to a physical address by walking the
+ // init_mm page tables. Returns the physical address on success, or writes
+ // a non-zero error to *err. Callers must check *err before using the result,

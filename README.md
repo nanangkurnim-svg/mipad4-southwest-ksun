@@ -21,11 +21,13 @@ The fragments:
 ## Patches
 - `patches/ksun/0001`: pix106's tree backports `copy_to_kernel_nofault()` from 5.8. KernelSU-Next's pre-5.8 compat macro then clashes with that declaration. The patch adds a Kbuild check for the backport, the same way KernelSU-Next already handles `strncpy_from_user_nofault`.
 - `patches/ksun/0002`: this config has no `CONFIG_KALLSYMS_ALL` (it depends on `DEBUG_KERNEL`), so kallsyms can't resolve the data symbol `sys_call_table` and the table hook switched itself off (`sth: sys_call_table not found`). Built in, KernelSU-Next now takes the address from `<asm/syscall.h>` instead.
+- `patches/ksun/0003`: `pmd_leaf()`/`pud_leaf()` arrived in 5.7. On arm64 4.19, `sys_call_table` sits in a 2M section mapping. `pmd_bad()` is true for section entries, so KernelSU-Next's page walk failed (`failed to find phy addr for patch dst addr`) and hooked 0/4 syscalls. The patch maps them to `pmd_sect()`/`pud_sect()`.
 - `scripts/prepatch_ksun_backports.py`: KernelSU-Next's Kbuild `sed`-edits `fs/namespace.c`, `fs/internal.h` and `include/linux/seccomp.h` during the build. Under `-j`, objects compiled before the edit miss `path_umount` or disagree on the `struct seccomp` layout. The script applies the same backports before `make`, and the build fails if KernelSU-Next edits sources anyway.
 
 ## Findings
 - Run 5 (upstream clang 21.1.8): bootloops before ramoops. Its KSU table hook was already disabled by the lookup failure 0002 fixes, so the toolchain was the cause.
 - Run 6 (AOSP r563880c), `ksu-cfiperm`: boots. KernelSU-Next 33327 core (LSM hooks, supercalls) initialises with no CFI reports, but the table hook stays off (fixed by 0002).
+- Run 8, `ksu-cfiperm` with 0002: boots and finds `sys_call_table`. All 4 patches fail in the page walk (fixed by 0003). No CFI reports, no oops.
 
 ## Output
 Each variant's Actions artifact holds:
