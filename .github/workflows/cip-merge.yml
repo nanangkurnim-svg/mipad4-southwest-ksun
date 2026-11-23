@@ -32,10 +32,10 @@ jobs:
         working-directory: kernel
         run: |
           git remote add cip https://git.kernel.org/pub/scm/linux/kernel/git/cip/linux-cip.git
-          # Only the commits after the tag that's already merged.
-          git fetch -q cip "refs/tags/${{ inputs.cip_tag }}:refs/tags/${{ inputs.cip_tag }}" \
-            --shallow-exclude="${{ inputs.cip_base }}" || \
-          git fetch -q cip "refs/tags/${{ inputs.cip_tag }}:refs/tags/${{ inputs.cip_tag }}" --depth=2000
+          # Full (non-shallow) fetch. The clone already holds the cip_base commit
+          # from pix106's history, so negotiation only transfers what's new.
+          # A shallow fetch would graft off that parent and leave no merge base.
+          git fetch -q cip "refs/tags/${{ inputs.cip_tag }}:refs/tags/${{ inputs.cip_tag }}"
           echo "merge-base: $(git merge-base HEAD ${{ inputs.cip_tag }} || echo none)"
           echo "commits to merge: $(git rev-list --count HEAD..${{ inputs.cip_tag }})"
 
