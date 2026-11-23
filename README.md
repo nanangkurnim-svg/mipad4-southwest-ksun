@@ -31,3 +31,8 @@ The Actions artifact holds:
 Flash it only on the matching ROM build. Keep the stock `boot.img` so you can roll back.
 
 All kernel code belongs to its upstream authors (GPL-2.0).
+- `patches/ksun/0002`: this config has no `CONFIG_KALLSYMS_ALL` (it depends on `DEBUG_KERNEL`), so kallsyms can't resolve the data symbol `sys_call_table` and the table hook switched itself off (`sth: sys_call_table not found`). Built in, KernelSU-Next now takes the address from `<asm/syscall.h>` instead.
+
+## Findings
+- Run 5 (upstream clang 21.1.8): bootloops before ramoops. Its KSU table hook was already disabled by the lookup failure above, so the toolchain was the cause.
+- Run 6 (AOSP r563880c), `ksu-cfiperm`: boots. KernelSU-Next 33327 core (LSM hooks, supercalls) initialises, no CFI reports, but the table hook stays off (fixed by 0002).

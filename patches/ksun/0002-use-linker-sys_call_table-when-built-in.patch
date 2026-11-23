@@ -1,0 +1,34 @@
+diff --git a/kernel/hook/syscall_table_hook.c b/kernel/hook/syscall_table_hook.c
+index 6aa55e7..efc45ff 100644
+--- a/kernel/hook/syscall_table_hook.c
++++ b/kernel/hook/syscall_table_hook.c
+@@ -10,6 +10,9 @@
+ #include <linux/errno.h>
+ #include <linux/fcntl.h>
+ #include <asm/ptrace.h>
++#if defined(CONFIG_ARM64) && !defined(MODULE)
++#include <asm/syscall.h>
++#endif
+ #if defined(__aarch64__)
+ #include <asm/memory.h>
+ #endif
+@@ -236,9 +239,19 @@ void __init ksu_syscall_table_hook_init(void)
+ 
+ 	ksu_init_symbol_resolver();
+ 
++#if defined(CONFIG_ARM64) && !defined(MODULE)
++	/*
++	 * Built in: take the table's address straight from the linker.
++	 * kallsyms only carries data symbols with CONFIG_KALLSYMS_ALL, which
++	 * many non-GKI 4.x configs leave off (it depends on DEBUG_KERNEL), so
++	 * the name lookup returns 0 there.
++	 */
++	ksu_sth_syscall_table = (ksu_syscall_fn_t *)sys_call_table;
++#else
+ 	ksu_sth_syscall_table =
+ 		(ksu_syscall_fn_t *)ksu_resolve_symbol_for_functable_hook(
+ 			"sys_call_table");
++#endif
+ 	pr_info("sth: sys_call_table=0x%lx\n",
+ 		(unsigned long)ksu_sth_syscall_table);
+ 
